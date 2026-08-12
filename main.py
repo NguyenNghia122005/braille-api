@@ -22,7 +22,7 @@ app.add_middleware(
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
-    llm_model = genai.GenerativeModel('gemini-1.5-flash')
+    llm_model = genai.GenerativeModel('gemini-3.5-flash')
 
 # Tải mô hình YOLO khi ứng dụng bắt đầu
 MODEL_PATH = './weights/yolov8_braille.pt'
