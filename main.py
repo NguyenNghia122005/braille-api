@@ -22,16 +22,15 @@ app.add_middleware(
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
-    llm_model = genai.GenerativeModel('gemini-3.5-flash')
+    llm_model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Tải mô hình YOLO khi ứng dụng bắt đầu
+# Khai báo biến rỗng ở ngoài cùng (Lazy Loading)
+model = None
 MODEL_PATH = './weights/yolov8_braille.pt'
-try:
-    model = YOLO(MODEL_PATH)
-except Exception as e:
-    print(f"Lỗi tải mô hình YOLO: {e}")
 
-# --- BẮT ĐẦU TỪ ĐIỂN VÀ HÀM LOGIC DỊCH (GIỮ NGUYÊN TỪ CODE CỦA BẠN) ---
+# ==========================================
+# TỪ ĐIỂN VÀ HÀM DỊCH LOGIC
+# ==========================================
 braille_to_vietnamese = {
     '100000': 'a', '001110': 'ă', '100001': 'â', '110000': 'b', '100100': 'c',
     '100110': 'd', '011101': 'đ', '100010': 'e', '110001': 'ê', '110100': 'f',
@@ -45,7 +44,9 @@ braille_to_vietnamese = {
     '010000': ',', '011000': ';', '010010': ':', '010011': '.',
     '111101': 'y', '111111': 'WRONG_CHAR'
 }
+
 braille_to_numbers = {'a': '1', 'b': '2', 'c': '3', 'd': '4', 'e': '5', 'f': '6', 'g': '7', 'h': '8', 'i': '9', 'j': '0'}
+
 tone_map = {
     ('´', 'a'): 'á', ('`', 'a'): 'à', ('ˀ', 'a'): 'ả', ('~', 'a'): 'ã', ('.', 'a'): 'ạ',
     ('´', 'ă'): 'ắ', ('`', 'ă'): 'ằ', ('ˀ', 'ă'): 'ẳ', ('~', 'ă'): 'ẵ', ('.', 'ă'): 'ặ',
@@ -89,11 +90,23 @@ def perform_translation(matrix):
             line_text += final_char
         translated_result.append(line_text)
     return "\n".join(translated_result)
-# --- KẾT THÚC LOGIC DỊCH ---
 
+# ==========================================
 # ENDPOINT API TẠO MỚI
+# ==========================================
 @app.post("/api/translate")
 async def translate_braille(files: List[UploadFile] = File(...)):
+    global model
+    
+    # 1. Đưa logic tải mô hình vào bên trong API (Lazy Loading)
+    if model is None:
+        try:
+            print("Đang nạp mô hình YOLO vào bộ nhớ...")
+            model = YOLO(MODEL_PATH)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Lỗi tải mô hình YOLO: {e}")
+
+    # 2. Kiểm tra đầu vào
     if len(files) < 1 or len(files) > 5:
         raise HTTPException(status_code=400, detail="Vui lòng gửi từ 1 đến 5 file ảnh.")
 
@@ -133,7 +146,7 @@ async def translate_braille(files: List[UploadFile] = File(...)):
 
         raw_texts.append(perform_translation(matrix))
 
-    # Gọi Gemini xử lý lại văn bản
+    # 3. Gọi Gemini xử lý lại văn bản
     combined_raw = "\n---\n".join([f"Bản {i+1}: {t}" for i, t in enumerate(raw_texts)])
     prompt = f"""
     Dưới đây là {len(raw_texts)} bản dịch thô từ ảnh quét chữ nổi Braille của cùng một văn bản.
